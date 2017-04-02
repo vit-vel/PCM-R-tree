@@ -34,82 +34,88 @@ struct MBR
     }
 };
 
+/*
+ * The R-tree object that contains:
+ *   1. Id of a real object or pointer to an object or db_record (pointer in this case)
+ *   2. Minimum bounding rectangle of a real object
+ */
 template<class ObjectT, class BoundValueT, uint16_t dimension>
-struct Node {
+struct RTObject
+{
     typedef MBR<BoundValueT, dimension> MBRT;
 
-    Node() {}
-    Node(const MBRT &mbr) : mbr_(mbr)
+    explicit RTObject(ObjectT *data = nullptr, const MBRT &mbr = MBRT())
+    : mbr_(mbr), data_(data)
     {}
 
-protected:
-    MBRT mbr_;
-
-    struct NodeStatistics {
-        size_t bytes_read;
-        size_t bytes_written;
-        size_t reads_number;
-        size_t writes_number;
-    } stats_;
-};
-
-template <class ObjectT, class BoundValueT, uint16_t dimension>
-struct LeafNode : Node<ObjectT, BoundValueT, dimension>
-{
-    typedef Node<ObjectT, BoundValueT, dimension> NodeT;
-
-    explicit LeafNode(ObjectT *data = nullptr, const typename NodeT::MBRT &mbr = typename NodeT::MBRT())
-            : NodeT(mbr), data_(data)
-    {}
-
-    virtual ~LeafNode()
+    virtual ~RTObject()
     { if (data_) {delete data_;} }
 
-private:
     ObjectT *data_;
+    MBRT mbr_;
 };
 
-template<class ObjectT, class BoundValueT, uint16_t dimension>
-struct IntrenalNode : Node<ObjectT, BoundValueT, dimension>
-{
-    typedef Node<ObjectT, BoundValueT, dimension> NodeT;
-    typedef LeafNode<ObjectT, BoundValueT, dimension> LeafNodeT;
 
-    IntrenalNode(uint16_t max_childs_number, uint16_t min_child_number, const typename NodeT::MBRT &mbr = typename NodeT::MBRT())
-            : NodeT(mbr),
+template<class ObjectT, class BoundValueT, uint16_t dimension, uint16_t max_childs_number, uint16_t min_child_number>
+struct Node
+{
+    typedef Node<ObjectT, BoundValueT, dimension, max_childs_number, min_child_number> NodeT;
+    typedef RTObject<ObjectT, BoundValueT, dimension> RTObjectT;
+    typedef MBR<BoundValueT, dimension> MBRT;
+
+    explicit Node(Node *parent = nullptr, const MBRT &mbr = MBRT(), uint16_t level = 0)
+            : level_(level),
               childs_number_(0),
-              min_childs_number_(min_child_number),
-              max_childs_number_(max_childs_number),
-              children_(new LeafNodeT[max_childs_number])
+              parent_(parent),
+              mbr_(mbr)
     {
+        if (level)
+        {
+            children_ = new NodeT[max_childs_number];
+        } else
+        {
+            data_ = new RTObjectT[max_childs_number];
+        }
+
         ++this->stats_.writes_number;
         this->stats_.bytes_written += sizeof(*this);
     }
 
-    virtual ~IntrenalNode()
-    { clear(); }
-
-    virtual void clear()
+    virtual ~Node()
     {
-        if (children_) {
-            this->mbr_.clear();
+        if (level_) {
             delete [] children_;
             children_ = nullptr;
-            childs_number_ = 0;
+        } else
+        {
+            delete [] data_;
+            data_ = nullptr;
         }
     }
 
-private:
+protected:
+    uint16_t level_;
     size_t childs_number_;
-    size_t min_childs_number_;
-    size_t max_childs_number_;
-    NodeT *children_;
+    NodeT *parent_;
+    union
+    {
+        NodeT *children_;
+        RTObjectT *data_;
+    };
+    MBRT mbr_;
+
+    struct {
+        size_t bytes_read;
+        size_t bytes_written;
+        size_t reads_number;
+        size_t writes_number;
+    } stats_ = {0, 0, 0, 0};
 };
 
-template <class ObjectT, class BoundValueT, uint16_t dimension>
+template <class ObjectT, class BoundValueT, uint16_t dimension, uint16_t max_childs_number, uint16_t min_child_number>
 struct Rtree
 {
-    typedef Node<ObjectT, BoundValueT, dimension> NodeT;
+    typedef Node<ObjectT, BoundValueT, dimension, max_childs_number, min_child_number> NodeT;
 
     virtual ~Rtree()
     { if (root_) {delete root_;} }
