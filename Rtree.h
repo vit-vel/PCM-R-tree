@@ -69,12 +69,12 @@ struct Node
               parent_(parent),
               mbr_(mbr)
     {
-        if (level)
-        {
-            children_ = new NodeT[max_childs_number];
-        } else
+        if (isLeaf())
         {
             data_ = new RTObjectT[max_childs_number];
+        } else
+        {
+            children_ = new NodeT[max_childs_number];
         }
 
         ++this->stats_.writes_number;
@@ -83,14 +83,18 @@ struct Node
 
     virtual ~Node()
     {
-        if (level_) {
-            delete [] children_;
-            children_ = nullptr;
-        } else
-        {
+        if (isLeaf()) {
             delete [] data_;
             data_ = nullptr;
+        } else
+        {
+            delete [] children_;
+            children_ = nullptr;
         }
+    }
+
+    bool isLeaf() {
+        return level_ == 0;
     }
 
 protected:
