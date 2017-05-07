@@ -2,6 +2,8 @@
 #define PCM_R_TREE_RTREE_H
 
 #include <ostream>
+#include <algorithm>
+#include <functional>
 
 /**
  * MBR --- Minimal Bounding Rectangle for R-tree node which cover all MBR of children
@@ -20,6 +22,50 @@ struct MBR
         std::fill_n(max, dimension, BoundValueT());
     }
 
+    BoundValueT area() const {
+        BoundValueT result = 1;
+        for (uint16_t i = 0; i < dimension; ++i) {
+            result *= max[i] - min[i];
+        }
+
+        return result;
+    }
+
+    BoundValueT perimeter() const {
+        BoundValueT result = 0;
+        for (uint16_t i = 0; i < dimension; ++i) {
+            result += max[i] - min[i];
+        }
+
+        return result * 2;
+    }
+
+    MBR expanded_mbr(MBR<BoundValueT, dimension> &mbr) const {
+        MBR<BoundValueT, dimension> result = MBR();
+        for (uint16_t i = 0; i < dimension; ++i) {
+            result.max[i] = std::max(max[i], mbr.max[i]);
+            result.min[i] = std::min(min[i], mbr.min[i]);
+        }
+        return result;
+    }
+
+    BoundValueT expantion_area(MBR<BoundValueT, dimension> &mbr) const {
+        BoundValueT expanded_mbr_area = 1;
+        for (uint16_t i = 0; i < dimension && expanded_mbr_area; ++i) {
+            expanded_mbr_area *= std::max(max[i], mbr.max[i]) - std::min(min[i], mbr.min[i]);
+        }
+        return expanded_mbr_area - area();
+    }
+
+    BoundValueT overlap_area(MBR<BoundValueT, dimension> &mbr) const {
+        BoundValueT overlap_area = 1;
+        // if overlap_area < 0 than there is no overlap
+        for (uint16_t i = 0; i < dimension && overlap_area > 0; ++i) {
+            overlap_area *= std::min(max[i], mbr.max[i]) - std::max(min[i], mbr.min[i]);
+        }
+        return overlap_area > 0 ? overlap_area : 0;
+    }
+
     friend std::ostream &operator<<(std::ostream &os, const MBR &mbr)
     {
         os << "min: ";
@@ -30,6 +76,7 @@ struct MBR
         for (auto min_value : mbr.max) {
             os << min_value << " ";
         }
+        os << std::endl << "area: " << mbr.area();
         return os;
     }
 };
@@ -97,6 +144,23 @@ struct Node
         return level_ == 0;
     }
 
+    uint16_t getLevel() const {
+        return level_;
+    }
+
+    const MBRT &getMbr() const {
+        return mbr_;
+    }
+
+    NodeT* choose_subtree(MBRT &mbr) {
+        NodeT *result = this;
+
+        while (!result->isLeaf()) {
+            result = result->level_ == 1 ? choose_leaf(mbr) : choose_internal(mbr);
+        }
+        return result;
+    }
+
 protected:
     uint16_t level_;
     size_t childs_number_;
@@ -114,20 +178,63 @@ protected:
         size_t reads_number;
         size_t writes_number;
     } stats_ = {0, 0, 0, 0};
+
+    NodeT* choose_internal(MBRT &mbr) {
+        if (!childs_number_) {
+            return this;
+        }
+
+        return std::min_element(children_, children_ + childs_number_,
+                                std::bind(choosing_internal_less, std::placeholders::_1, std::placeholders::_2, mbr));
+    }
+
+    NodeT* choose_leaf(MBRT &mbr) {
+        NodeT *result = this;
+
+        BoundValueT min_overlap = result->mbr_.area() * childs_number_;
+
+        for (size_t i = 0; i < childs_number_; ++i) {
+            MBRT expanded_child_mbr = children_[i].mbr_.expanded_mbr(mbr);
+            // sum of overlaps excluding overlap with itself
+            BoundValueT overlap_sum = std::accumulate(children_, children_ + childs_number_, BoundValueT(),
+                                                      [&expanded_child_mbr](BoundValueT partial_resutlt, NodeT child) {
+                                                          return partial_resutlt + expanded_child_mbr.overlap_area(child.mbr_);
+                                                      }) - expanded_child_mbr.area();
+            if (overlap_sum < min_overlap ||
+                    overlap_sum == min_overlap && choosing_internal_less(*result, children_[i], mbr)) {
+                result = &children_[i];
+                min_overlap = overlap_sum;
+            }
+        }
+
+        return result;
+    }
+
+    bool choosing_internal_less(NodeT &first, NodeT &second, MBRT &mbr) {
+        BoundValueT first_expantion_area = first.mbr_.expantion_area(mbr);
+        BoundValueT second_expantion_area = second.mbr_.expantion_area(mbr);
+        return first_expantion_area < second_expantion_area ||
+               first_expantion_area == second_expantion_area && first.mbr_.area() < second.mbr_.area();
+    }
 };
 
 template <class ObjectT, class BoundValueT, uint16_t dimension, uint16_t max_childs_number, uint16_t min_child_number>
 struct Rtree
 {
     typedef Node<ObjectT, BoundValueT, dimension, max_childs_number, min_child_number> NodeT;
+    typedef MBR<BoundValueT, dimension> MBRT;
 
-    virtual ~Rtree()
-    { if (root_) {delete root_;} }
+    Rtree(NodeT *root_ = nullptr) : root_(root_) {}
 
     void setRoot(NodeT *root)
     { root_ = root;}
 
+    NodeT* choose_subtree(MBRT &mbr) {
+        return root_->choose_subtree(mbr);
+    }
+
 private:
+
     NodeT *root_;
 };
 
