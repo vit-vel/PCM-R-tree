@@ -40,8 +40,16 @@ struct MBR
         return result * 2;
     }
 
-    MBR expanded_mbr(MBR<BoundValueT, dimension> &mbr) const {
-        MBR<BoundValueT, dimension> result = MBR();
+    bool expand(MBR &other) {
+        for (uint16_t i = 0; i < dimension; ++i)
+        {
+            min[i] = std::min(min[i], other.min[i]);
+            max[i] = std::max(max[i], other.max[i]);
+        }
+    }
+
+    MBR expanded_mbr(MBR &mbr) const {
+        MBR result = MBR();
         for (uint16_t i = 0; i < dimension; ++i) {
             result.max[i] = std::max(max[i], mbr.max[i]);
             result.min[i] = std::min(min[i], mbr.min[i]);
@@ -49,7 +57,7 @@ struct MBR
         return result;
     }
 
-    BoundValueT expantion_area(MBR<BoundValueT, dimension> &mbr) const {
+    BoundValueT expantion_area(MBR &mbr) const {
         BoundValueT expanded_mbr_area = 1;
         for (uint16_t i = 0; i < dimension && expanded_mbr_area; ++i) {
             expanded_mbr_area *= std::max(max[i], mbr.max[i]) - std::min(min[i], mbr.min[i]);
@@ -57,7 +65,7 @@ struct MBR
         return expanded_mbr_area - area();
     }
 
-    BoundValueT overlap_area(MBR<BoundValueT, dimension> &mbr) const {
+    BoundValueT overlap_area(MBR &mbr) const {
         BoundValueT overlap_area = 1;
         // if overlap_area < 0 than there is no overlap
         for (uint16_t i = 0; i < dimension && overlap_area > 0; ++i) {
@@ -92,11 +100,9 @@ struct RTObject
     typedef MBR<BoundValueT, dimension> MBRT;
 
     explicit RTObject(ObjectT *data = nullptr, const MBRT &mbr = MBRT())
-    : mbr_(mbr), data_(data)
-    {}
+            : mbr_(mbr), data_(data) {}
 
-    virtual ~RTObject()
-    { if (data_) {delete data_;} }
+    virtual ~RTObject() { if (data_) { delete data_; }}
 
     ObjectT *data_;
     MBRT mbr_;
@@ -116,7 +122,10 @@ struct Node
               parent_(parent),
               mbr_(mbr)
     {
-        if (isLeaf())
+        static_assert(max_childs_number <= 2 * min_child_number, "Minimum number of childs should be at most a half of maximum number of childs. Otherwise split is impossible");
+        static_assert(std::is_arithmetic<BoundValueT>::value, "Bound value type should be arithmetic");
+
+        if (is_leaf())
         {
             data_ = new RTObjectT[max_childs_number];
         } else
@@ -130,44 +139,78 @@ struct Node
 
     virtual ~Node()
     {
-        if (isLeaf()) {
-            delete [] data_;
+        if (is_leaf())
+        {
+            delete[] data_;
             data_ = nullptr;
         } else
         {
-            delete [] children_;
+            delete[] children_;
             children_ = nullptr;
         }
     }
 
-    bool isLeaf() {
+    bool is_leaf()
+    {
         return level_ == 0;
     }
 
-    uint16_t getLevel() const {
+    bool is_root()
+    {
+        return parent_ == nullptr;
+    }
+
+    uint16_t get_level() const {
         return level_;
     }
 
-    const MBRT &getMbr() const {
+    const MBRT &get_mbr() const {
         return mbr_;
     }
 
-    NodeT* choose_subtree(MBRT &mbr) {
-        NodeT *result = this;
+    size_t get_childs_count() const
+    {
+        return childs_number_;
+    }
 
-        while (!result->isLeaf()) {
+    NodeT* choose_subtree(MBRT &mbr)
+    {
+        NodeT* result = this;
+
+        while (!result->is_leaf())
+        {
             result = result->level_ == 1 ? choose_leaf(mbr) : choose_internal(mbr);
         }
         return result;
     }
 
+    bool insert(RTObjectT &object)
+    {
+        if (!is_leaf())
+        {
+            return false;
+        }
+        if (childs_number_ < max_childs_number)
+        {
+            data_[childs_number_++] = object;
+            expand_mbr(object.mbr_);
+        } else
+        {
+            split();
+        }
+    }
+
+    void split()
+    {
+    }
+
 protected:
     uint16_t level_;
     size_t childs_number_;
-    NodeT *parent_;
+    NodeT* parent_;
     union
     {
-        NodeT *children_;
+        NodeT* children_;
         RTObjectT *data_;
     };
     MBRT mbr_;
@@ -189,7 +232,7 @@ protected:
     }
 
     NodeT* choose_leaf(MBRT &mbr) {
-        NodeT *result = this;
+        NodeT* result = this;
 
         BoundValueT min_overlap = result->mbr_.area() * childs_number_;
 
@@ -201,7 +244,7 @@ protected:
                                                           return partial_resutlt + expanded_child_mbr.overlap_area(child.mbr_);
                                                       }) - expanded_child_mbr.area();
             if (overlap_sum < min_overlap ||
-                    overlap_sum == min_overlap && choosing_internal_less(*result, children_[i], mbr)) {
+                overlap_sum == min_overlap && choosing_internal_less(*result, children_[i], mbr)) {
                 result = &children_[i];
                 min_overlap = overlap_sum;
             }
@@ -216,26 +259,36 @@ protected:
         return first_expantion_area < second_expantion_area ||
                first_expantion_area == second_expantion_area && first.mbr_.area() < second.mbr_.area();
     }
+
+    void expand_mbr(MBRT &mbr)
+    {
+        NodeT* current = this;
+        while (current->mbr_.expand(mbr))
+        {
+            current = current->parent_;
+        }
+    }
 };
 
-template <class ObjectT, class BoundValueT, uint16_t dimension, uint16_t max_childs_number, uint16_t min_child_number>
+template<class ObjectT, class BoundValueT, uint16_t dimension, uint16_t max_childs_number, uint16_t min_child_number>
 struct Rtree
 {
     typedef Node<ObjectT, BoundValueT, dimension, max_childs_number, min_child_number> NodeT;
+    typedef RTObject<ObjectT, BoundValueT, dimension> RTObjectT;
     typedef MBR<BoundValueT, dimension> MBRT;
 
-    Rtree(NodeT *root_ = nullptr) : root_(root_) {}
+    Rtree(NodeT* root_ = nullptr) : root_(root_) {}
 
-    void setRoot(NodeT *root)
-    { root_ = root;}
+    void setRoot(NodeT* root) { root_ = root; }
 
-    NodeT* choose_subtree(MBRT &mbr) {
-        return root_->choose_subtree(mbr);
+    void insert(RTObjectT &object)
+    {
+        root_->choose_subtree(object.mbr_)->insert(object);
     }
 
 private:
 
-    NodeT *root_;
+    NodeT* root_;
 };
 
 #endif //PCM_R_TREE_RTREE_H
