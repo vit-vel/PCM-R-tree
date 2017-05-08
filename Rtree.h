@@ -22,25 +22,30 @@ struct MBR
         std::fill_n(max, dimension, BoundValueT());
     }
 
-    BoundValueT area() const {
+    BoundValueT area() const
+    {
         BoundValueT result = 1;
-        for (uint16_t i = 0; i < dimension; ++i) {
+        for (uint16_t i = 0; i < dimension; ++i)
+        {
             result *= max[i] - min[i];
         }
 
         return result;
     }
 
-    BoundValueT perimeter() const {
+    BoundValueT perimeter() const
+    {
         BoundValueT result = 0;
-        for (uint16_t i = 0; i < dimension; ++i) {
+        for (uint16_t i = 0; i < dimension; ++i)
+        {
             result += max[i] - min[i];
         }
 
         return result * 2;
     }
 
-    bool expand(MBR &other) {
+    bool expand(MBR &other)
+    {
         for (uint16_t i = 0; i < dimension; ++i)
         {
             min[i] = std::min(min[i], other.min[i]);
@@ -61,9 +66,11 @@ struct MBR
         return count;
     }
 
-    MBR expanded_mbr(MBR &mbr) const {
+    MBR expanded_mbr(MBR &mbr) const
+    {
         MBR result = MBR();
-        for (uint16_t i = 0; i < dimension; ++i) {
+        for (uint16_t i = 0; i < dimension; ++i)
+        {
             result.max[i] = std::max(max[i], mbr.max[i]);
             result.min[i] = std::min(min[i], mbr.min[i]);
         }
@@ -83,18 +90,22 @@ struct MBR
         return result;
     }
 
-    BoundValueT expantion_area(MBR &mbr) const {
+    BoundValueT expantion_area(MBR &mbr) const
+    {
         BoundValueT expanded_mbr_area = 1;
-        for (uint16_t i = 0; i < dimension && expanded_mbr_area; ++i) {
+        for (uint16_t i = 0; i < dimension && expanded_mbr_area; ++i)
+        {
             expanded_mbr_area *= std::max(max[i], mbr.max[i]) - std::min(min[i], mbr.min[i]);
         }
         return expanded_mbr_area - area();
     }
 
-    BoundValueT overlap_area(MBR &mbr) const {
+    BoundValueT overlap_area(MBR &mbr) const
+    {
         BoundValueT overlap_area = 1;
         // if overlap_area < 0 than there is no overlap
-        for (uint16_t i = 0; i < dimension && overlap_area > 0; ++i) {
+        for (uint16_t i = 0; i < dimension && overlap_area > 0; ++i)
+        {
             overlap_area *= std::min(max[i], mbr.max[i]) - std::max(min[i], mbr.min[i]);
         }
         return overlap_area > 0 ? overlap_area : 0;
@@ -103,11 +114,13 @@ struct MBR
     friend std::ostream &operator<<(std::ostream &os, const MBR &mbr)
     {
         os << "min: ";
-        for (auto min_value : mbr.min) {
+        for (auto min_value : mbr.min)
+        {
             os << min_value << " ";
         }
         os << std::endl << "max: ";
-        for (auto min_value : mbr.max) {
+        for (auto min_value : mbr.max)
+        {
             os << min_value << " ";
         }
         os << std::endl << "area: " << mbr.area();
@@ -177,27 +190,19 @@ struct Node
     }
 
     bool is_leaf()
-    {
-        return level_ == 0;
-    }
+    { return level_ == 0; }
 
     bool is_root()
-    {
-        return parent_ == nullptr;
-    }
+    { return parent_ == nullptr; }
 
-    uint16_t get_level() const {
-        return level_;
-    }
+    uint16_t get_level() const
+    { return level_; }
 
-    const MBRT &get_mbr() const {
-        return mbr_;
-    }
+    const MBRT &get_mbr() const
+    { return mbr_; }
 
     size_t get_childs_count() const
-    {
-        return childs_number_;
-    }
+    { return childs_number_; }
 
     NodeT* choose_subtree(MBRT &mbr)
     {
@@ -228,7 +233,8 @@ struct Node
 
     void split()
     {
-        if (childs_number_ < max_childs_number) {
+        if (childs_number_ < max_childs_number)
+        {
             return;
         }
         size_t split_axis = choose_split_axis();
@@ -245,36 +251,41 @@ protected:
     };
     MBRT mbr_;
 
-    struct {
+    struct
+    {
         size_t bytes_read;
         size_t bytes_written;
         size_t reads_number;
         size_t writes_number;
     } stats_ = {0, 0, 0, 0};
 
-    NodeT* choose_internal(MBRT &mbr) {
-        if (!childs_number_) {
-            return this;
-        }
+    NodeT* choose_internal(MBRT &mbr)
+    {
+        if (!childs_number_)
+        { return this; }
 
         return std::min_element(children_, children_ + childs_number_,
                                 std::bind(choosing_internal_less, std::placeholders::_1, std::placeholders::_2, mbr));
     }
 
-    NodeT* choose_leaf(MBRT &mbr) {
+    NodeT* choose_leaf(MBRT &mbr)
+    {
         NodeT* result = this;
 
         BoundValueT min_overlap = result->mbr_.area() * childs_number_;
 
-        for (size_t i = 0; i < childs_number_; ++i) {
+        for (size_t i = 0; i < childs_number_; ++i)
+        {
             MBRT expanded_child_mbr = children_[i].mbr_.expanded_mbr(mbr);
             // sum of overlaps excluding overlap with itself
             BoundValueT overlap_sum = std::accumulate(children_, children_ + childs_number_, BoundValueT(),
-                                                      [&expanded_child_mbr](BoundValueT partial_resutlt, NodeT child) {
+                                                      [&expanded_child_mbr](BoundValueT partial_resutlt, NodeT child)
+                                                      {
                                                           return partial_resutlt + expanded_child_mbr.overlap_area(child.mbr_);
                                                       }) - expanded_child_mbr.area();
             if (overlap_sum < min_overlap ||
-                overlap_sum == min_overlap && choosing_internal_less(*result, children_[i], mbr)) {
+                overlap_sum == min_overlap && choosing_internal_less(*result, children_[i], mbr))
+            {
                 result = &children_[i];
                 min_overlap = overlap_sum;
             }
@@ -283,7 +294,8 @@ protected:
         return result;
     }
 
-    bool choosing_internal_less(NodeT &first, NodeT &second, MBRT &mbr) {
+    bool choosing_internal_less(NodeT &first, NodeT &second, MBRT &mbr)
+    {
         BoundValueT first_expantion_area = first.mbr_.expantion_area(mbr);
         BoundValueT second_expantion_area = second.mbr_.expantion_area(mbr);
         return first_expantion_area < second_expantion_area ||
@@ -325,7 +337,8 @@ protected:
 
             margins_sum += calculate_distribution_margin_sum();
 
-            if (margins_sum < min_margins_sum || min_margins_sum < 0) {
+            if (margins_sum < min_margins_sum || min_margins_sum < 0)
+            {
                 min_margins_sum = margins_sum;
                 best_axis = i;
             }
@@ -334,7 +347,8 @@ protected:
         return best_axis;
     }
 
-    BoundValueT calculate_distribution_margin_sum() {
+    BoundValueT calculate_distribution_margin_sum()
+    {
         BoundValueT result = BoundValueT();
         int distribution_range = max_childs_number - 2 * min_child_number;
 
@@ -375,7 +389,8 @@ struct Rtree
 
     Rtree(NodeT* root_ = nullptr) : root_(root_) {}
 
-    void setRoot(NodeT* root) { root_ = root; }
+    void setRoot(NodeT* root)
+    { root_ = root; }
 
     void insert(RTObjectT &object)
     {
