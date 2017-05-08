@@ -48,11 +48,37 @@ struct MBR
         }
     }
 
+    template<class Iterator>
+    typename std::enable_if<std::is_same<typename std::iterator_traits<Iterator>::value_type,MBR>::value, size_t>::type
+    expand(Iterator *begin, Iterator *end)
+    {
+        size_t count = 0;
+        while (begin != end)
+        {
+            expand(*begin++);
+            ++count;
+        }
+        return count;
+    }
+
     MBR expanded_mbr(MBR &mbr) const {
         MBR result = MBR();
         for (uint16_t i = 0; i < dimension; ++i) {
             result.max[i] = std::max(max[i], mbr.max[i]);
             result.min[i] = std::min(min[i], mbr.min[i]);
+        }
+        return result;
+    }
+
+    template<class Iterator>
+    typename std::enable_if<std::is_same<typename std::iterator_traits<Iterator>::value_type,MBR>::value, MBR>::type
+    expanded_mbr(Iterator *begin, Iterator *end)
+    {
+        MBR result = MBR();
+        while (begin != end)
+        {
+            result.expand(*begin);
+            ++begin;
         }
         return result;
     }
@@ -202,6 +228,10 @@ struct Node
 
     void split()
     {
+        if (childs_number_ < max_childs_number) {
+            return;
+        }
+        size_t split_axis = choose_split_axis();
     }
 
 protected:
@@ -267,6 +297,72 @@ protected:
         {
             current = current->parent_;
         }
+    }
+
+    uint16_t choose_split_axis()
+    {
+        uint16_t best_axis = 0;
+        BoundValueT min_margins_sum = -1;
+
+        for (uint16_t i = 0; i < dimension; ++i)
+        {
+            BoundValueT margins_sum = 0;
+
+            // sort by maximum bounds
+            std::sort(children_, children_ + childs_number_,
+                      [i](NodeT &first, NodeT &second)
+                      {
+                          return first.mbr_.max[i] < second.mbr_.max[i];
+                      });
+
+            margins_sum += calculate_distribution_margin_sum();
+
+            std::sort(children_, children_ + childs_number_,
+                      [i](NodeT &first, NodeT &second)
+                      {
+                          return first.mbr_.min[i] < second.mbr_.min[i];
+                      });
+
+            margins_sum += calculate_distribution_margin_sum();
+
+            if (margins_sum < min_margins_sum || min_margins_sum < 0) {
+                min_margins_sum = margins_sum;
+                best_axis = i;
+            }
+        }
+
+        return best_axis;
+    }
+
+    BoundValueT calculate_distribution_margin_sum() {
+        BoundValueT result = BoundValueT();
+        int distribution_range = max_childs_number - 2 * min_child_number;
+
+        if (distribution_range < 0)
+        { return result; }
+
+        MBRT first_node_mbr = MBRT();
+        first_node_mbr.clear();
+
+        MBRT second_node_mbr = MBRT();
+        second_node_mbr.clear();
+
+        // pointers to children that can be distributed to any of new nodes
+        NodeT* unstable_children_begin = children_ + min_child_number;
+        NodeT* unstable_children_end = children_ + childs_number_ - min_child_number;
+
+
+        // place minimum number of childs to new nodes
+        first_node_mbr.expand(children_, unstable_children_begin);
+        second_node_mbr.expand(unstable_children_end, children_ + childs_number_);
+
+        for (size_t k = 1; k <= distribution_range; ++k)
+        {
+            result += first_node_mbr.expanded_mbr(unstable_children_begin, unstable_children_begin + k).perimeter() +
+                      second_node_mbr.expanded_mbr(unstable_children_begin + k, unstable_children_end).perimetr();
+        }
+
+        return result;
     }
 };
 
