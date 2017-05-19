@@ -7,19 +7,43 @@
 
 /**
  * MBR --- Minimal Bounding Rectangle for R-tree node which cover all MBR of children
- * @tparam BoundValueT is a type of the variable storing a coordinate of the rectangle side
+ * @tparam BoundValueT is a type of the variable storing a coordinate of the rectangle side. Should be an arithmetic type!
  * @tparam dimension is a dimension of R-tree
  */
+
+template<class BoundValueT, uint16_t dimension, class SFINAE = void>
+struct MBR;
+
 template<class BoundValueT, uint16_t dimension>
-struct MBR
+struct MBR<BoundValueT, dimension, typename std::enable_if<std::is_arithmetic<BoundValueT>::value>::type>
 {
     BoundValueT min[dimension];
     BoundValueT max[dimension];
 
+    MBR()
+    {
+        clear();
+    }
+
+    /**
+     * example: MBR with  BoundValueT=int, dimension=4 can be createad as follow:
+     * {{1, 10}, {2, 4}, {-1, -1}, {0, 100}}
+     * where i-th pair defines min and max bounds for i-th dimention
+     */
+    MBR(const std::initializer_list<std::pair<BoundValueT, BoundValueT>> &bounds_list)
+    {
+        uint16_t dim = 0;
+        for (auto bounds : bounds_list)
+        {
+            min[dim] = bounds.first;
+            max[dim++] = bounds.second;
+        }
+    }
+
     void clear()
     {
-        std::fill_n(min, dimension, BoundValueT());
-        std::fill_n(max, dimension, BoundValueT());
+        std::fill_n(min, dimension, std::numeric_limits<BoundValueT>::max());
+        std::fill_n(max, dimension, std::numeric_limits<BoundValueT>::min());
     }
 
     BoundValueT area() const
