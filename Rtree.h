@@ -35,6 +35,7 @@ struct MBR<BoundValueT, dimension, typename std::enable_if<std::is_arithmetic<Bo
         uint16_t dim = 0;
         for (auto bounds : bounds_list)
         {
+            assert(bounds.first <= bounds.second);
             min[dim] = bounds.first;
             max[dim++] = bounds.second;
         }
@@ -178,9 +179,8 @@ struct RTObject
             : mbr_(mbr), data_(data)
     {}
 
-    RTObject(RTObject &other) = delete;
-
-    RTObject&operator= (RTObject &other) = delete;
+    RTObject(const RTObject &other) : RTObject(other.data_, other.mbr_)
+    {}
 
     RTObject(RTObject && other)
             : mbr_(other.mbr_), data_(other.data_)
@@ -216,7 +216,6 @@ struct Node
               mbr_(mbr)
     {
         static_assert(max_childs_number >= 2 * min_child_number, "Minimum number of childs should be at most a half of maximum number of childs. Otherwise split is impossible");
-        static_assert(std::is_arithmetic<BoundValueT>::value, "Bound value type should be arithmetic");
 
         if (is_leaf())
         {
@@ -295,18 +294,18 @@ struct Node
         return *this;
     }
 
-    bool is_leaf()
+    bool is_leaf() const
     { return level_ == 0; }
 
-    bool is_root()
+    bool is_root() const
     { return parent_ == nullptr; }
 
-    Node* get_parent()
+    Node* get_parent() const
     { return parent_; }
 
     Node* get_root()
     {
-        Node* result = this;
+        Node result = this;
         while (result->parent_ != nullptr)
         {
             result = result->parent_;
@@ -419,6 +418,27 @@ struct Node
         }
 
         return result;
+    }
+
+    void find(const MBRT &mbr, std::vector<RTObjectT> &vector)
+    {
+        if (is_leaf())
+        {
+            std::for_each(data_, data_ + childs_number_, [&vector, &mbr](RTObjectT &object) {
+                if (object.mbr_.overlap_area(mbr) > 0)
+                {
+                    vector.push_back(object);
+                }
+            });
+        } else
+        {
+            std::for_each(children_, children_ + childs_number_, [&vector, &mbr](Node &node) {
+                if (node.mbr_.overlap_area(mbr) > 0)
+                {
+                    node.find(mbr, vector);
+                }
+            });
+        }
     }
 
 protected:
@@ -728,6 +748,13 @@ struct Rtree
         }
 
         node->insert(std::move(object));
+    }
+
+    std::vector<RTObjectT> find(const MBRT &mbr)
+    {
+        std::vector<RTObjectT> result;
+        root_->find(mbr, result);
+        return result;
     }
 
 private:
