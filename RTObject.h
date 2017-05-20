@@ -15,15 +15,14 @@ namespace rtree
         {
             typedef MBR<BoundValueT, dimension> MBRT;
 
-            explicit RTObject(ObjectT *data = nullptr, const MBRT &mbr = MBRT())
+            explicit RTObject(ObjectT* data = nullptr, const MBRT &mbr = MBRT())
                     : mbr_(mbr), data_(data)
             {}
 
             RTObject(const RTObject &other) : RTObject(other.data_, other.mbr_)
             {}
 
-            RTObject(RTObject && other)
-                    : mbr_(other.mbr_), data_(other.data_)
+            RTObject(RTObject && other) : mbr_(other.mbr_), data_(other.data_)
             {
                 other.data_ = nullptr;
             }
@@ -38,7 +37,7 @@ namespace rtree
             const MBRT& get_mbr()
             { return mbr_; }
 
-            ObjectT *data_;
+            ObjectT* data_;
             MBRT mbr_;
         };
     }

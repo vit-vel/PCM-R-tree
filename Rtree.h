@@ -18,7 +18,7 @@ namespace rtree
             typedef RTObject<ObjectT, BoundValueT, dimension> RTObjectT;
             typedef MBR<BoundValueT, dimension> MBRT;
 
-            explicit Node(uint16_t level = 0, const MBRT &mbr = MBRT(), Node *parent = nullptr)
+            explicit Node(uint16_t level = 0, const MBRT &mbr = MBRT(), Node* parent = nullptr)
                     : level_(level),
                       childs_number_(0),
                       parent_(parent),
@@ -41,7 +41,7 @@ namespace rtree
 
             Node(Node const &other) = delete;
 
-            Node &operator=(Node const &other) = delete;
+            Node& operator=(Node const &other) = delete;
 
             Node(Node &&other)
                     : level_(other.level_),
@@ -80,7 +80,7 @@ namespace rtree
                 parent_ = nullptr;
             }
 
-            Node &operator=(Node &&other)
+            Node& operator=(Node &&other)
             {
                 clear();
 
@@ -109,9 +109,9 @@ namespace rtree
 
             bool is_root() const { return parent_ == nullptr; }
 
-            Node *get_parent() const { return parent_; }
+            Node* get_parent() const { return parent_; }
 
-            Node *get_root()
+            Node* get_root()
             {
                 Node* result = this;
                 while (result->parent_ != nullptr)
@@ -127,9 +127,9 @@ namespace rtree
 
             size_t get_childs_count() const { return childs_number_; }
 
-            Node *choose_subtree(MBRT const &mbr)
+            Node* choose_subtree(MBRT const &mbr)
             {
-                Node *result = this;
+                Node* result = this;
 
                 while (!result->is_leaf())
                 {
@@ -138,7 +138,7 @@ namespace rtree
                 return result;
             }
 
-            RTObjectT *insert(RTObjectT &&object)
+            RTObjectT* insert(RTObjectT &&object)
             {
                 if (!is_leaf() || childs_number_ >= max_childs_number)
                 {
@@ -150,7 +150,7 @@ namespace rtree
                 return &data_[childs_number_ - 1];
             }
 
-            Node *insert(Node &&node)
+            Node* insert(Node &&node)
             {
                 if (level_ - node.level_ != 1 || childs_number_ >= max_childs_number) { return nullptr; }
 
@@ -160,7 +160,7 @@ namespace rtree
                 return &children_[childs_number_ - 1];
             }
 
-            Node *split()
+            Node* split()
             {
                 if (is_root() || childs_number_ < 2 * min_child_number)
                 {
@@ -177,7 +177,7 @@ namespace rtree
                     {
                         second_node.insert(std::move(data_[i]));
                     } else
-                    {
+                     {
                         second_node.insert(std::move(children_[i]));
                     }
                 }
@@ -190,18 +190,17 @@ namespace rtree
                 return parent_;
             }
 
-            Node *choose_internal(MBRT const &mbr)
+            Node* choose_internal(MBRT const &mbr)
             {
                 if (!childs_number_) { return this; }
 
                 return std::min_element(children_, children_ + childs_number_,
-                                        std::bind(choosing_internal_less, std::placeholders::_1, std::placeholders::_2,
-                                                  mbr));
+                                        std::bind(choosing_internal_less, std::placeholders::_1, std::placeholders::_2, mbr));
             }
 
-            Node *choose_leaf(MBRT const &mbr)
+            Node* choose_leaf(MBRT const &mbr)
             {
-                Node *result = this;
+                Node* result = this;
 
                 BoundValueT min_overlap = result->mbr_.area() * childs_number_;
 
@@ -210,8 +209,7 @@ namespace rtree
                     MBRT expanded_child_mbr = children_[i].mbr_.expanded_mbr(mbr);
                     // sum of overlaps excluding overlap with itself
                     BoundValueT overlap_sum = std::accumulate(children_, children_ + childs_number_, BoundValueT(),
-                                                              [&expanded_child_mbr](BoundValueT partial_resutlt,
-                                                                                    Node &child)
+                                                              [&expanded_child_mbr](BoundValueT partial_resutlt, Node &child)
                                                               {
                                                                   return partial_resutlt +
                                                                          expanded_child_mbr.overlap_area(child.mbr_);
@@ -227,11 +225,11 @@ namespace rtree
                 return result;
             }
 
-            void find(const MBRT &mbr, std::vector<RTObjectT> &vector)
+            void find(const MBRT &mbr, std::vector<RTObjectT> &vector) const
             {
                 if (is_leaf())
                 {
-                    std::for_each(data_, data_ + childs_number_, [&vector, &mbr](RTObjectT &object)
+                    std::for_each(data_, data_ + childs_number_, [&vector, &mbr](const RTObjectT &object)
                     {
                         if (object.mbr_.overlap_area(mbr) > 0)
                         {
@@ -240,7 +238,7 @@ namespace rtree
                     });
                 } else
                 {
-                    std::for_each(children_, children_ + childs_number_, [&vector, &mbr](Node &node)
+                    std::for_each(children_, children_ + childs_number_, [&vector, &mbr](const Node &node)
                     {
                         if (node.mbr_.overlap_area(mbr) > 0)
                         {
@@ -253,11 +251,11 @@ namespace rtree
         protected:
             uint16_t level_;
             size_t childs_number_;
-            Node *parent_;
+            Node* parent_;
             union
             {
-                Node *children_;
-                RTObjectT *data_;
+                Node* children_;
+                RTObjectT* data_;
             };
             MBRT mbr_;
 
@@ -279,7 +277,7 @@ namespace rtree
 
             void expand_mbr(MBRT const &mbr)
             {
-                Node *current = this;
+                Node* current = this;
                 while (current && current->mbr_.expand(mbr))
                 {
                     current = current->parent_;
@@ -571,7 +569,7 @@ namespace rtree
             node->insert(std::move(object));
         }
 
-        std::vector<RTObjectT> find(const MBRT &mbr)
+        std::vector<RTObjectT> find(const MBRT &mbr) const
         {
             std::vector<RTObjectT> result;
             root_->find(mbr, result);
@@ -580,7 +578,7 @@ namespace rtree
 
     private:
 
-        NodeT *root_;
+        NodeT* root_;
 
         /**
          * split up to root if needed
@@ -588,9 +586,9 @@ namespace rtree
          * @param mbr is an mbr for choosing right node after splitting
          * @return pointer to the parent node, where results of the split were inserted
          */
-        NodeT *split(NodeT *node, MBRT &mbr)
+        NodeT* split(NodeT* node, MBRT &mbr)
         {
-            NodeT *parent;
+            NodeT* parent;
             // we must be able to insert a new node into the parent after splitting. Otherwise, the parent needs to be splited too
             if ((parent = node->get_parent()) && parent->get_childs_count() >= max_childs_number)
             {
@@ -604,7 +602,7 @@ namespace rtree
             // if we want to split the root, then we should create a new root that will contain 2 children after splitting
             if (node == root_)
             {
-                NodeT *new_root = new NodeT(root_->get_level() + 1);
+                NodeT* new_root = new NodeT(root_->get_level() + 1);
                 node = new_root->insert(std::move(*root_));
                 delete root_;
                 root_ = new_root;

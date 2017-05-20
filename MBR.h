@@ -90,7 +90,7 @@ namespace rtree
             template<class Iterator>
 //    typename std::enable_if<std::is_same<decltype( std::declval<typename std::iterator_traits<Iterator>::value_type>().get_mbr() ), const MBR>::value, size_t>::type
             size_t
-            expand(Iterator *begin, Iterator *end)
+            expand(Iterator* begin, Iterator* end)
             {
                 size_t count = 0;
                 while (begin != end)
@@ -116,7 +116,7 @@ namespace rtree
             template<class Iterator>
 //    typename std::enable_if<std::is_same<decltype( std::declval<typename std::iterator_traits<Iterator>::value_type>().get_mbr() ), const MBR>::value, MBR>::type
             MBR
-            expanded_mbr(Iterator *begin, Iterator *end)
+            expanded_mbr(Iterator* begin, Iterator* end)
             {
                 MBR result = MBR();
                 while (begin != end)
