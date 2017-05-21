@@ -28,13 +28,8 @@ namespace rtree
                 static_assert(max_childs_number >= 2 * min_child_number,
                               "Minimum number of childs should be at most a half of maximum number of childs. Otherwise split is impossible");
 
-                if (is_leaf())
-                {
-                    data_ = new RTObjectT[max_childs_number];
-                } else
-                {
-                    children_ = new Node[max_childs_number];
-                }
+                // lazy memory allocation
+                data_ = nullptr;
 
                 ++this->stats_.writes_number;
                 this->stats_.bytes_written += sizeof(*this);
@@ -146,6 +141,11 @@ namespace rtree
                     return nullptr;
                 }
 
+                if (!data_)
+                {
+                    alloc_memory_for_children();
+                }
+
                 data_[childs_number_++] = std::move(object);
                 expand_mbr(data_[childs_number_ - 1].mbr_);
                 return &data_[childs_number_ - 1];
@@ -154,6 +154,11 @@ namespace rtree
             Node* insert(Node &&node)
             {
                 if (level_ - node.level_ != 1 || childs_number_ >= max_childs_number) { return nullptr; }
+
+                if (!children_)
+                {
+                    alloc_memory_for_children();
+                }
 
                 node.parent_ = this;
                 children_[childs_number_++] = std::move(node);
@@ -274,6 +279,17 @@ namespace rtree
                 BoundValueT second_expantion_area = second.mbr_.expantion_area(mbr);
                 return first_expantion_area < second_expantion_area ||
                        first_expantion_area == second_expantion_area && first.mbr_.area() < second.mbr_.area();
+            }
+
+            void alloc_memory_for_children()
+            {
+                if (is_leaf() && !data_)
+                {
+                    data_ = new RTObjectT[max_childs_number];
+                } else if (!children_)
+                {
+                    children_ = new Node[max_childs_number];
+                }
             }
 
             void expand_mbr(MBRT const &mbr)
