@@ -419,8 +419,6 @@ namespace rtree
                         std::for_each(unstable_data_end, data_ + childs_number_, [&second_node_mbr](RTObjectT* object) {
                             second_node_mbr.expand(object->mbr_);
                         });
-//                        first_node_mbr.expand(data_, unstable_data_begin);
-//                        second_node_mbr.expand(unstable_data_end, data_ + childs_number_);
 
                         for (size_t k = 0; k <= distribution_range; ++k)
                         {
@@ -434,9 +432,6 @@ namespace rtree
                             });
 
                             result += expanded_first_node_mbr.perimeter() + expanded_second_node_mbr.perimeter();
-
-//                            result += first_node_mbr.expanded_mbr(unstable_data_begin, unstable_data_begin + k).perimeter() +
-//                                    second_node_mbr.expanded_mbr(unstable_data_begin + k, unstable_data_end).perimeter();
                         }
 
                     } else
@@ -447,9 +442,6 @@ namespace rtree
 
 
                         // place minimum number of childs to new nodes
-//                        first_node_mbr.expand(children_, unstable_children_begin);
-//                        second_node_mbr.expand(unstable_children_end, children_ + childs_number_);
-
                         std::for_each(children_, unstable_children_begin, [&first_node_mbr](Node* node) {
                             first_node_mbr.expand(node->mbr_);
                         });
@@ -469,11 +461,6 @@ namespace rtree
                             });
 
                             result += expanded_first_node_mbr.perimeter() + expanded_second_node_mbr.perimeter();
-
-//                            result += first_node_mbr.expanded_mbr(unstable_children_begin,
-//                                                                  unstable_children_begin + k).perimeter() +
-//                                      second_node_mbr.expanded_mbr(unstable_children_begin + k,
-//                                                                   unstable_children_end).perimeter();
                         }
                     }
 
@@ -552,9 +539,6 @@ namespace rtree
                     if (is_leaf())
                     {
                         // place minimum number of data objects to new nodes
-//                        first_node_mbr.expand(data_, unstable_data_begin);
-//                        second_node_mbr.expand(unstable_data_end, data_ + childs_number_);
-
                         std::for_each(data_, unstable_data_begin, [&first_node_mbr](RTObjectT* object) {
                             first_node_mbr.expand(object->mbr_);
                         });
@@ -565,9 +549,6 @@ namespace rtree
                     } else
                     {
                         // place minimum number of childs to new nodes
-//                        first_node_mbr.expand(children_, unstable_children_begin);
-//                        second_node_mbr.expand(unstable_children_end, children_ + childs_number_);
-
                         std::for_each(children_, unstable_children_begin, [&first_node_mbr](Node* node) {
                             first_node_mbr.expand(node->mbr_);
                         });
@@ -584,15 +565,12 @@ namespace rtree
                         {
                             first_node_mbr.expand((*(unstable_data_begin + k - 1))->mbr_);
 
-//                            second_extended_mbr = second_node_mbr.expanded_mbr(unstable_data_begin + k, unstable_data_end);
                             std::for_each(unstable_data_begin + k, unstable_data_end, [&second_extended_mbr](RTObjectT* node) {
                                 second_extended_mbr.expand(node->mbr_);
                             });
                         } else
                         {
                             first_node_mbr.expand((*(unstable_children_begin + k - 1))->mbr_);
-//                            second_extended_mbr = second_node_mbr.expanded_mbr(unstable_children_begin + k,
-//                                                                               unstable_children_end);
                             std::for_each(unstable_children_begin + k, unstable_children_end, [&second_extended_mbr](Node* node) {
                                 second_extended_mbr.expand(node->mbr_);
                             });
@@ -619,13 +597,11 @@ namespace rtree
                     mbr_.clear();
                     if (is_leaf())
                     {
-//                        mbr_.expand(data_, data_ + childs_number_);
                         std::for_each(data_, data_ + childs_number_, [this](RTObjectT* object) {
                             this->mbr_.expand(object->mbr_);
                         });
                     } else
                     {
-//                        mbr_.expand(children_, children_ + childs_number_);
                         std::for_each(children_, children_ + childs_number_, [this](Node* node) {
                             this->mbr_.expand(node->mbr_);
                         });
