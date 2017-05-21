@@ -31,10 +31,12 @@ namespace rtree
 
                     if (is_leaf())
                     {
-                        data_ = new RTObjectT[max_childs_number];
+                        data_ = new RTObjectT* [max_childs_number];
+                        std::fill(data_, data_ + childs_number_, nullptr);
                     } else
                     {
-                        children_ = new Node[max_childs_number];
+                        children_ = new Node* [max_childs_number];
+                        std::fill(children_, children_ + childs_number_, nullptr);
                     }
 
                     ++this->stats_.writes_number;
@@ -57,7 +59,7 @@ namespace rtree
                     } else
                     {
                         children_ = other.children_;
-                        std::for_each(children_, children_ + childs_number_, [this](Node &node) { node.parent_ = this; });
+                        std::for_each(children_, children_ + childs_number_, [this](Node *node) { node->parent_ = this; });
                     }
                     other.data_ = nullptr;
                     other.children_ = nullptr;
@@ -72,10 +74,16 @@ namespace rtree
                 {
                     if (is_leaf() && data_)
                     {
+                        std::for_each(data_, data_ + childs_number_, [](RTObjectT* p_object) {
+                            if (p_object) { delete p_object; }
+                        });
                         delete[] data_;
                         data_ = nullptr;
                     } else if (children_)
                     {
+                        std::for_each(children_, children_ + childs_number_, [](Node* p_node) {
+                            if (p_node) { delete p_node; }
+                        });
                         delete[] children_;
                         children_ = nullptr;
                     }
@@ -98,7 +106,7 @@ namespace rtree
                     } else
                     {
                         children_ = other.children_;
-                        std::for_each(children_, children_ + childs_number_, [this](Node &node) { node.parent_ = this; });
+                        std::for_each(children_, children_ + childs_number_, [this](Node* node) { node->parent_ = this; });
                     }
 
                     other.data_ = nullptr;
@@ -140,47 +148,76 @@ namespace rtree
                     return result;
                 }
 
-                RTObjectT* insert(RTObjectT &&object)
+                bool insert(RTObjectT &&object)
                 {
                     if (!is_leaf() || childs_number_ >= max_childs_number)
+                    { return false; }
+
+                    RTObjectT* new_object = new RTObjectT(std::move(object));
+                    if (!insert(new_object))
                     {
-                        return nullptr;
+                        delete new_object;
+                        return false;
                     }
-
-                    data_[childs_number_++] = std::move(object);
-                    expand_mbr(data_[childs_number_ - 1].mbr_);
-                    return &data_[childs_number_ - 1];
+                    return true;
                 }
 
-                Node* insert(Node &&node)
+                bool insert(Node &&node)
                 {
-                    if (level_ - node.level_ != 1 || childs_number_ >= max_childs_number) { return nullptr; }
+                    if (level_ - node.level_ != 1 || childs_number_ >= max_childs_number)
+                    { return false; }
 
-                    node.parent_ = this;
-                    children_[childs_number_++] = std::move(node);
-                    expand_mbr(children_[childs_number_ - 1].mbr_);
-                    return &children_[childs_number_ - 1];
+                    Node* new_node = new Node(std::move(node));
+                    if (!insert(new_node))
+                    {
+                        delete new_node;
+                        return false;
+                    }
+                    return true;
                 }
 
-                Node* split()
+                bool insert(RTObjectT *object)
+                {
+                    if (!is_leaf() || childs_number_ >= max_childs_number)
+                    { return false; }
+
+                    data_[childs_number_++] = object ;
+                    expand_mbr(data_[childs_number_ - 1]->mbr_);
+                    return true;
+                }
+
+                bool insert(Node *node)
+                {
+                    if (level_ - node->level_ != 1 || childs_number_ >= max_childs_number)
+                    { return false; }
+
+                    node->parent_ = this;
+                    children_[childs_number_++] = node;
+                    expand_mbr(children_[childs_number_ - 1]->mbr_);
+                    return true;
+                }
+
+                void split()
                 {
                     if (is_root() || childs_number_ < 2 * min_child_number)
                     {
                         // if you want to split the root, you should create a new root, insert into it the current root and only then call split
-                        return nullptr;
+                        return;
                     }
                     uint16_t split_axis = choose_split_axis();
                     size_t separator = choose_separating_index(split_axis);
 
-                    Node second_node(level_);
+                    Node* second_node = new Node(level_);
                     for (size_t i = separator; i < childs_number_; ++i)
                     {
                         if (is_leaf())
                         {
-                            second_node.insert(std::move(data_[i]));
+                            second_node->insert(data_[i]);
+                            data_[i] = nullptr;
                         } else
                         {
-                            second_node.insert(std::move(children_[i]));
+                            second_node->insert(children_[i]);
+                            children_[i] = nullptr;
                         }
                     }
 
@@ -188,16 +225,15 @@ namespace rtree
                     childs_number_ = separator;
                     recalc_mbr();
 
-                    assert(parent_->insert(std::move(second_node)));
-                    return parent_;
+                    assert(parent_->insert(second_node));
                 }
 
                 Node* choose_internal(MBRT const &mbr)
                 {
                     if (!childs_number_) { return this; }
 
-                    return std::min_element(children_, children_ + childs_number_,
-                                            std::bind(choosing_internal_less, std::placeholders::_1, std::placeholders::_2, mbr));
+                    return *std::min_element(children_, children_ + childs_number_,
+                                             std::bind(choosing_internal_less, std::placeholders::_1, std::placeholders::_2, mbr));
                 }
 
                 Node* choose_leaf(MBRT const &mbr)
@@ -208,18 +244,18 @@ namespace rtree
 
                     for (size_t i = 0; i < childs_number_; ++i)
                     {
-                        MBRT expanded_child_mbr = children_[i].mbr_.expanded_mbr(mbr);
+                        MBRT expanded_child_mbr = children_[i]->mbr_.expanded_mbr(mbr);
                         // sum of overlaps excluding overlap with itself
                         BoundValueT overlap_sum = std::accumulate(children_, children_ + childs_number_, BoundValueT(),
-                                                                  [&expanded_child_mbr](BoundValueT partial_resutlt, Node &child)
+                                                                  [&expanded_child_mbr](BoundValueT partial_resutlt, Node *child)
                                                                   {
                                                                       return partial_resutlt +
-                                                                             expanded_child_mbr.overlap_area(child.mbr_);
+                                                                             expanded_child_mbr.overlap_area(child->mbr_);
                                                                   }) - expanded_child_mbr.area();
                         if (overlap_sum < min_overlap ||
-                            overlap_sum == min_overlap && choosing_internal_less(*result, children_[i], mbr))
+                            overlap_sum == min_overlap && choosing_internal_less(result, children_[i], mbr))
                         {
-                            result = &children_[i];
+                            result = children_[i];
                             min_overlap = overlap_sum;
                         }
                     }
@@ -231,20 +267,20 @@ namespace rtree
                 {
                     if (is_leaf())
                     {
-                        std::for_each(data_, data_ + childs_number_, [&vector, &mbr](const RTObjectT &object)
+                        std::for_each(data_, data_ + childs_number_, [&vector, &mbr](RTObjectT *object)
                         {
-                            if (object.mbr_.overlap_area(mbr) > 0)
+                            if (object->mbr_.overlap_area(mbr) > 0)
                             {
-                                vector.push_back(object);
+                                vector.push_back(*object);
                             }
                         });
                     } else
                     {
-                        std::for_each(children_, children_ + childs_number_, [&vector, &mbr](const Node &node)
+                        std::for_each(children_, children_ + childs_number_, [&vector, &mbr](Node* node)
                         {
-                            if (node.mbr_.overlap_area(mbr) > 0)
+                            if (node->mbr_.overlap_area(mbr) > 0)
                             {
-                                node.find(mbr, vector);
+                                node->find(mbr, vector);
                             }
                         });
                     }
@@ -256,8 +292,8 @@ namespace rtree
                 Node* parent_;
                 union
                 {
-                    Node* children_;
-                    RTObjectT* data_;
+                    Node** children_;
+                    RTObjectT** data_;
                 };
                 MBRT mbr_;
 
@@ -269,12 +305,12 @@ namespace rtree
                     size_t writes_number;
                 } stats_ = {0, 0, 0, 0};
 
-                static bool choosing_internal_less(Node const &first, Node const &second, MBRT const &mbr)
+                static bool choosing_internal_less(Node const * first, Node const * second, MBRT const &mbr)
                 {
-                    BoundValueT first_expantion_area = first.mbr_.expantion_area(mbr);
-                    BoundValueT second_expantion_area = second.mbr_.expantion_area(mbr);
+                    BoundValueT first_expantion_area = first->mbr_.expantion_area(mbr);
+                    BoundValueT second_expantion_area = second->mbr_.expantion_area(mbr);
                     return first_expantion_area < second_expantion_area ||
-                           first_expantion_area == second_expantion_area && first.mbr_.area() < second.mbr_.area();
+                           first_expantion_area == second_expantion_area && first->mbr_.area() < second->mbr_.area();
                 }
 
                 void expand_mbr(MBRT const &mbr)
@@ -289,36 +325,36 @@ namespace rtree
                 void sort_children_by_min_bounds(uint16_t axis)
                 {
                     std::sort(children_, children_ + childs_number_,
-                              [axis](Node &first, Node &second)
+                              [axis](Node* first, Node* second)
                               {
-                                  return first.mbr_.min[axis] < second.mbr_.min[axis];
+                                  return first->mbr_.min[axis] < second->mbr_.min[axis];
                               });
                 }
 
                 void sort_children_by_max_bounds(uint16_t axis)
                 {
                     std::sort(children_, children_ + childs_number_,
-                              [axis](Node &first, Node &second)
+                              [axis](Node* first, Node* second)
                               {
-                                  return first.mbr_.max[axis] < second.mbr_.max[axis];
+                                  return first->mbr_.max[axis] < second->mbr_.max[axis];
                               });
                 }
 
                 void sort_data_by_min_bounds(uint16_t axis)
                 {
                     std::sort(data_, data_ + childs_number_,
-                              [axis](RTObjectT &first, RTObjectT &second)
+                              [axis](RTObjectT* first, RTObjectT* second)
                               {
-                                  return first.mbr_.min[axis] < second.mbr_.min[axis];
+                                  return first->mbr_.min[axis] < second->mbr_.min[axis];
                               });
                 }
 
                 void sort_data_by_max_bounds(uint16_t axis)
                 {
                     std::sort(data_, data_ + childs_number_,
-                              [axis](RTObjectT &first, RTObjectT &second)
+                              [axis](RTObjectT* first, RTObjectT* second)
                               {
-                                  return first.mbr_.max[axis] < second.mbr_.max[axis];
+                                  return first->mbr_.max[axis] < second->mbr_.max[axis];
                               });
                 }
 
@@ -372,38 +408,72 @@ namespace rtree
                     if (is_leaf())
                     {
                         // pointers to data objects that can be distributed to any of new nodes
-                        RTObjectT* unstable_data_begin = data_ + min_child_number;
-                        RTObjectT* unstable_data_end = data_ + childs_number_ - min_child_number;
+                        RTObjectT **unstable_data_begin = data_ + min_child_number;
+                        RTObjectT **unstable_data_end = data_ + childs_number_ - min_child_number;
 
 
                         // place minimum number of data nodes to new nodes
-                        first_node_mbr.expand(data_, unstable_data_begin);
-                        second_node_mbr.expand(unstable_data_end, data_ + childs_number_);
+                        std::for_each(data_, unstable_data_begin, [&first_node_mbr](RTObjectT* object) {
+                            first_node_mbr.expand(object->mbr_);
+                        });
+                        std::for_each(unstable_data_end, data_ + childs_number_, [&second_node_mbr](RTObjectT* object) {
+                            second_node_mbr.expand(object->mbr_);
+                        });
+//                        first_node_mbr.expand(data_, unstable_data_begin);
+//                        second_node_mbr.expand(unstable_data_end, data_ + childs_number_);
 
                         for (size_t k = 0; k <= distribution_range; ++k)
                         {
-                            result +=
-                                    first_node_mbr.expanded_mbr(unstable_data_begin, unstable_data_begin + k).perimeter() +
-                                    second_node_mbr.expanded_mbr(unstable_data_begin + k, unstable_data_end).perimeter();
+                            MBRT expanded_first_node_mbr = first_node_mbr;
+                            MBRT expanded_second_node_mbr = second_node_mbr;
+                            std::for_each(unstable_data_begin, unstable_data_begin + k, [&expanded_first_node_mbr](RTObjectT* object) {
+                                expanded_first_node_mbr.expand(object->mbr_);
+                            });
+                            std::for_each(unstable_data_begin + k, unstable_data_end, [&expanded_second_node_mbr](RTObjectT* object) {
+                                expanded_second_node_mbr.expand(object->mbr_);
+                            });
+
+                            result += expanded_first_node_mbr.perimeter() + expanded_second_node_mbr.perimeter();
+
+//                            result += first_node_mbr.expanded_mbr(unstable_data_begin, unstable_data_begin + k).perimeter() +
+//                                    second_node_mbr.expanded_mbr(unstable_data_begin + k, unstable_data_end).perimeter();
                         }
 
                     } else
                     {
                         // pointers to children that can be distributed to any of new nodes
-                        Node* unstable_children_begin = children_ + min_child_number;
-                        Node* unstable_children_end = children_ + childs_number_ - min_child_number;
+                        Node **unstable_children_begin = children_ + min_child_number;
+                        Node **unstable_children_end = children_ + childs_number_ - min_child_number;
 
 
                         // place minimum number of childs to new nodes
-                        first_node_mbr.expand(children_, unstable_children_begin);
-                        second_node_mbr.expand(unstable_children_end, children_ + childs_number_);
+//                        first_node_mbr.expand(children_, unstable_children_begin);
+//                        second_node_mbr.expand(unstable_children_end, children_ + childs_number_);
+
+                        std::for_each(children_, unstable_children_begin, [&first_node_mbr](Node* node) {
+                            first_node_mbr.expand(node->mbr_);
+                        });
+                        std::for_each(unstable_children_end, children_ + childs_number_, [&second_node_mbr](Node* node) {
+                            second_node_mbr.expand(node->mbr_);
+                        });
 
                         for (size_t k = 0; k <= distribution_range; ++k)
                         {
-                            result += first_node_mbr.expanded_mbr(unstable_children_begin,
-                                                                  unstable_children_begin + k).perimeter() +
-                                      second_node_mbr.expanded_mbr(unstable_children_begin + k,
-                                                                   unstable_children_end).perimeter();
+                            MBRT expanded_first_node_mbr = first_node_mbr;
+                            MBRT expanded_second_node_mbr = second_node_mbr;
+                            std::for_each(unstable_children_begin, unstable_children_begin + k, [&expanded_first_node_mbr](Node* node) {
+                                expanded_first_node_mbr.expand(node->mbr_);
+                            });
+                            std::for_each(unstable_children_begin + k, unstable_children_end, [&expanded_second_node_mbr](Node* node) {
+                                expanded_second_node_mbr.expand(node->mbr_);
+                            });
+
+                            result += expanded_first_node_mbr.perimeter() + expanded_second_node_mbr.perimeter();
+
+//                            result += first_node_mbr.expanded_mbr(unstable_children_begin,
+//                                                                  unstable_children_begin + k).perimeter() +
+//                                      second_node_mbr.expanded_mbr(unstable_children_begin + k,
+//                                                                   unstable_children_end).perimeter();
                         }
                     }
 
@@ -472,23 +542,38 @@ namespace rtree
                     MBRT second_node_mbr = MBRT();
 
                     // pointers to children that can be distributed to any of new nodes
-                    Node* unstable_children_begin = children_ + min_child_number;
-                    Node* unstable_children_end = children_ + childs_number_ - min_child_number;
+                    Node** unstable_children_begin = children_ + min_child_number;
+                    Node** unstable_children_end = children_ + childs_number_ - min_child_number;
 
-                    RTObjectT* unstable_data_begin = data_ + min_child_number;
-                    RTObjectT* unstable_data_end = data_ + childs_number_ - min_child_number;
+                    RTObjectT** unstable_data_begin = data_ + min_child_number;
+                    RTObjectT** unstable_data_end = data_ + childs_number_ - min_child_number;
 
 
                     if (is_leaf())
                     {
                         // place minimum number of data objects to new nodes
-                        first_node_mbr.expand(data_, unstable_data_begin);
-                        second_node_mbr.expand(unstable_data_end, data_ + childs_number_);
+//                        first_node_mbr.expand(data_, unstable_data_begin);
+//                        second_node_mbr.expand(unstable_data_end, data_ + childs_number_);
+
+                        std::for_each(data_, unstable_data_begin, [&first_node_mbr](RTObjectT* object) {
+                            first_node_mbr.expand(object->mbr_);
+                        });
+                        std::for_each(unstable_data_end, data_ + childs_number_, [&second_node_mbr](RTObjectT* object) {
+                            second_node_mbr.expand(object->mbr_);
+                        });
+
                     } else
                     {
                         // place minimum number of childs to new nodes
-                        first_node_mbr.expand(children_, unstable_children_begin);
-                        second_node_mbr.expand(unstable_children_end, children_ + childs_number_);
+//                        first_node_mbr.expand(children_, unstable_children_begin);
+//                        second_node_mbr.expand(unstable_children_end, children_ + childs_number_);
+
+                        std::for_each(children_, unstable_children_begin, [&first_node_mbr](Node* node) {
+                            first_node_mbr.expand(node->mbr_);
+                        });
+                        std::for_each(unstable_children_end, children_ + childs_number_, [&second_node_mbr](Node* node) {
+                            second_node_mbr.expand(node->mbr_);
+                        });
                     }
 
                     for (size_t k = 0; k <= distribution_range; ++k)
@@ -497,13 +582,20 @@ namespace rtree
 
                         if (is_leaf())
                         {
-                            first_node_mbr.expand((unstable_data_begin + k - 1)->mbr_);
-                            second_extended_mbr = second_node_mbr.expanded_mbr(unstable_data_begin + k, unstable_data_end);
+                            first_node_mbr.expand((*(unstable_data_begin + k - 1))->mbr_);
+
+//                            second_extended_mbr = second_node_mbr.expanded_mbr(unstable_data_begin + k, unstable_data_end);
+                            std::for_each(unstable_data_begin + k, unstable_data_end, [&second_extended_mbr](RTObjectT* node) {
+                                second_extended_mbr.expand(node->mbr_);
+                            });
                         } else
                         {
-                            first_node_mbr.expand((unstable_children_begin + k - 1)->mbr_);
-                            second_extended_mbr = second_node_mbr.expanded_mbr(unstable_children_begin + k,
-                                                                               unstable_children_end);
+                            first_node_mbr.expand((*(unstable_children_begin + k - 1))->mbr_);
+//                            second_extended_mbr = second_node_mbr.expanded_mbr(unstable_children_begin + k,
+//                                                                               unstable_children_end);
+                            std::for_each(unstable_children_begin + k, unstable_children_end, [&second_extended_mbr](Node* node) {
+                                second_extended_mbr.expand(node->mbr_);
+                            });
                         }
 
                         BoundValueT overlap_value = first_node_mbr.overlap_area(second_extended_mbr);
@@ -527,10 +619,16 @@ namespace rtree
                     mbr_.clear();
                     if (is_leaf())
                     {
-                        mbr_.expand(data_, data_ + childs_number_);
+//                        mbr_.expand(data_, data_ + childs_number_);
+                        std::for_each(data_, data_ + childs_number_, [this](RTObjectT* object) {
+                            this->mbr_.expand(object->mbr_);
+                        });
                     } else
                     {
-                        mbr_.expand(children_, children_ + childs_number_);
+//                        mbr_.expand(children_, children_ + childs_number_);
+                        std::for_each(children_, children_ + childs_number_, [this](Node* node) {
+                            this->mbr_.expand(node->mbr_);
+                        });
                     }
                 }
             };
@@ -556,13 +654,12 @@ namespace rtree
             bool insert(RTObjectT &&object)
             {
                 NodeT* node = root_->choose_subtree(object.mbr_);
-                while (node->get_childs_count() >= max_childs_number)
+                if (node->get_childs_count() >= max_childs_number)
                 {
-                    split(node, object.mbr_);
-                    node = root_->choose_subtree(object.mbr_);
+                    split(node);
                 }
 
-                return node->insert(std::move(object)) != nullptr;
+                return node->insert(std::move(object));
             }
 
             std::vector<RTObjectT> find(const MBRT &mbr) const
@@ -579,32 +676,25 @@ namespace rtree
             /**
              * split up to root if needed
              * @param node is a splitted node
-             * @param mbr is an mbr for choosing right node after splitting
-             * @return pointer to the same level node as @param node, where an object with @param mbr should be inserted after splitting
              */
-            NodeT* split(NodeT* node, MBRT &mbr)
+            void split(NodeT* node)
             {
                 NodeT* parent;
                 // we must be able to insert a new node into the parent after splitting. Otherwise, the parent needs to be splited too
-                while ((parent = node->get_parent()) && parent->get_childs_count() >= max_childs_number)
+                if ((parent = node->get_parent()) && parent->get_childs_count() >= max_childs_number)
                 {
-                    node = split(parent, mbr)->choose_internal(mbr);
-                    if (node->get_childs_count() < max_childs_number)
-                    {
-                        return node;
-                    }
+                    split(parent);
                 }
 
                 // if we want to split the root, then we should create a new root that will contain 2 children after splitting
                 if (node == root_)
                 {
                     NodeT* new_root = new NodeT(root_->get_level() + 1);
-                    node = new_root->insert(std::move(*root_));
-                    delete root_;
+                    new_root->insert(root_);
                     root_ = new_root;
                 }
 
-                return node->split()->choose_internal(mbr);
+                node->split();
             }
         };
     }
