@@ -1,4 +1,4 @@
-#! /usr/bin/env python
+#! /usr/bin/env python3
 
 import re
 import sys
@@ -20,6 +20,6 @@ def parse(path):
 
 if __name__ == '__main__':
     if len(sys.argv) > 1:
-        print('bytes read: {stats[0]}\nbites written: {stats[1]}'.format(stats=parse(sys.argv[1])))
+        print('{stats[0]} {stats[1]}'.format(stats=parse(sys.argv[1])))
     else:
         print("Pass the path to the file with results of DHAT as an argument")
