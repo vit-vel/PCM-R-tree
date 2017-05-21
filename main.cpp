@@ -1,6 +1,7 @@
 #include <iostream>
 #include "Rtree.h"
 #include "PCMRtree.h"
+#include "smoke_test.h"
 
 using bounds_type = int32_t;
 using value_type = int32_t;
@@ -58,6 +59,8 @@ int main(int argc, char *argv[])
             tree.insert(random_rtobject());
         }
     }
+
+//    run_tests();
 
     return 0;
 }
