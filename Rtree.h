@@ -4,6 +4,7 @@
 #include <ostream>
 #include <algorithm>
 #include <functional>
+#include <assert.h>
 
 #include "MBR.h"
 #include "RTObject.h"
@@ -202,7 +203,7 @@ namespace rtree
             {
                 Node* result = this;
 
-                BoundValueT min_overlap = result->mbr_.area() * childs_number_;
+                BoundValueT min_overlap = std::numeric_limits<BoundValueT>::max();
 
                 for (size_t i = 0; i < childs_number_; ++i)
                 {
@@ -323,7 +324,7 @@ namespace rtree
             uint16_t choose_split_axis()
             {
                 uint16_t best_axis = 0;
-                BoundValueT min_margins_sum = -1;
+                BoundValueT min_margins_sum = std::numeric_limits<BoundValueT>::max();
 
                 for (uint16_t i = 0; i < dimension; ++i)
                 {
@@ -346,7 +347,7 @@ namespace rtree
                         margins_sum += calculate_distribution_margin_sum();
                     }
 
-                    if (margins_sum < min_margins_sum || min_margins_sum < 0)
+                    if (margins_sum < min_margins_sum)
                     {
                         min_margins_sum = margins_sum;
                         best_axis = i;
@@ -416,8 +417,8 @@ namespace rtree
             size_t choose_separating_index(uint16_t split_axis)
             {
 
-                BoundValueT min_overlap_value = mbr_.area();
-                BoundValueT current_area_value = 2 * mbr_.area();
+                BoundValueT min_overlap_value = std::numeric_limits<BoundValueT>::max();
+                BoundValueT current_area_value = std::numeric_limits<BoundValueT>::max();
                 size_t result_index = min_child_number;
 
                 if (is_leaf())
