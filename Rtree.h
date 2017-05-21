@@ -186,7 +186,7 @@ namespace rtree
                 childs_number_ = separator;
                 recalc_mbr();
 
-                parent_->insert(std::move(second_node));
+                assert(parent_->insert(std::move(second_node)));
                 return parent_;
             }
 
@@ -365,16 +365,13 @@ namespace rtree
                 size_t distribution_range = childs_number_ - 2 * min_child_number;
 
                 MBRT first_node_mbr = MBRT();
-                first_node_mbr.clear();
-
                 MBRT second_node_mbr = MBRT();
-                second_node_mbr.clear();
 
                 if (is_leaf())
                 {
                     // pointers to data objects that can be distributed to any of new nodes
-                    RTObjectT *unstable_data_begin = data_ + min_child_number;
-                    RTObjectT *unstable_data_end = data_ + childs_number_ - min_child_number;
+                    RTObjectT* unstable_data_begin = data_ + min_child_number;
+                    RTObjectT* unstable_data_end = data_ + childs_number_ - min_child_number;
 
 
                     // place minimum number of data nodes to new nodes
@@ -391,8 +388,8 @@ namespace rtree
                 } else
                 {
                     // pointers to children that can be distributed to any of new nodes
-                    Node *unstable_children_begin = children_ + min_child_number;
-                    Node *unstable_children_end = children_ + childs_number_ - min_child_number;
+                    Node* unstable_children_begin = children_ + min_child_number;
+                    Node* unstable_children_end = children_ + childs_number_ - min_child_number;
 
 
                     // place minimum number of childs to new nodes
@@ -470,17 +467,14 @@ namespace rtree
                 size_t distribution_range = childs_number_ - 2 * min_child_number;
 
                 MBRT first_node_mbr = MBRT();
-                first_node_mbr.clear();
-
                 MBRT second_node_mbr = MBRT();
-                second_node_mbr.clear();
 
                 // pointers to children that can be distributed to any of new nodes
-                Node *unstable_children_begin = children_ + min_child_number;
-                Node *unstable_children_end = children_ + childs_number_ - min_child_number;
+                Node* unstable_children_begin = children_ + min_child_number;
+                Node* unstable_children_end = children_ + childs_number_ - min_child_number;
 
-                RTObjectT *unstable_data_begin = data_ + min_child_number;
-                RTObjectT *unstable_data_end = data_ + childs_number_ - min_child_number;
+                RTObjectT* unstable_data_begin = data_ + min_child_number;
+                RTObjectT* unstable_data_end = data_ + childs_number_ - min_child_number;
 
 
                 if (is_leaf())
@@ -557,16 +551,16 @@ namespace rtree
             }
         }
 
-        void insert(RTObjectT &&object)
+        bool insert(RTObjectT &&object)
         {
-            NodeT *node = root_->choose_subtree(object.mbr_);
-            if (node->get_childs_count() >= max_childs_number)
+            NodeT* node = root_->choose_subtree(object.mbr_);
+            while (node->get_childs_count() >= max_childs_number)
             {
                 split(node, object.mbr_);
                 node = root_->choose_subtree(object.mbr_);
             }
 
-            node->insert(std::move(object));
+            return node->insert(std::move(object)) != nullptr;
         }
 
         std::vector<RTObjectT> find(const MBRT &mbr) const
@@ -584,13 +578,13 @@ namespace rtree
          * split up to root if needed
          * @param node is a splitted node
          * @param mbr is an mbr for choosing right node after splitting
-         * @return pointer to the parent node, where results of the split were inserted
+         * @return pointer to the same level node as @param node, where an object with @param mbr should be inserted after splitting
          */
         NodeT* split(NodeT* node, MBRT &mbr)
         {
             NodeT* parent;
             // we must be able to insert a new node into the parent after splitting. Otherwise, the parent needs to be splited too
-            if ((parent = node->get_parent()) && parent->get_childs_count() >= max_childs_number)
+            while ((parent = node->get_parent()) && parent->get_childs_count() >= max_childs_number)
             {
                 node = split(parent, mbr)->choose_internal(mbr);
                 if (node->get_childs_count() < max_childs_number)
