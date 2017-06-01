@@ -6,14 +6,14 @@
 using bounds_type = int32_t;
 using value_type = int32_t;
 
-constexpr uint16_t dimensiion = 2;
+constexpr uint16_t dimension = 2;
 constexpr size_t min_elements = 2;
 constexpr size_t max_elements = 4;
 
-rtree::details::RTObject<value_type, bounds_type, dimensiion> random_rtobject()
+rtree::details::RTObject<value_type, bounds_type, dimension> random_rtobject()
 {
-    rtree::details::RTObject<value_type, bounds_type, dimensiion> object;
-    for (size_t j = 0; j < dimensiion; ++j)
+    rtree::details::RTObject<value_type, bounds_type, dimension> object;
+    for (size_t j = 0; j < dimension; ++j)
     {
         int min = random() % INT16_MAX;
         int max = random() % INT16_MAX;
@@ -44,7 +44,7 @@ int main(int argc, char *argv[])
 
     if (pcm)
     {
-        rtree::pcm::Rtree<value_type, bounds_type, dimensiion, max_elements, min_elements> tree;
+        rtree::pcm::Rtree<value_type, bounds_type, dimension, max_elements, min_elements> tree;
 
         for (size_t i = 0; i < elements_number; ++i)
         {
@@ -52,7 +52,7 @@ int main(int argc, char *argv[])
         }
     } else
     {
-        rtree::Rtree<value_type, bounds_type, dimensiion, max_elements, min_elements> tree;
+        rtree::Rtree<value_type, bounds_type, dimension, max_elements, min_elements> tree;
 
         for (size_t i = 0; i < elements_number; ++i)
         {
